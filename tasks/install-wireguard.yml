@@ -1,0 +1,61 @@
+---
+#########################################
+#            _             _ _          #
+#           | |           (_) |         #
+#           | | __ ___   ___| | __      #
+#       _   | |/ _` \ \ / / | |/ /      #
+#      | |__| | (_| |\ V /| |   <       #
+#       \____/ \__,_| \_/ |_|_|\_\      #
+#                                       #
+#########################################
+
+- name: Output hostvars
+  debug:
+    var: hostvars[item]['ansible_eth0']['ipv4']['address']
+  loop: "{{ ansible_play_batch }}"
+  when: item != inventory_hostname
+
+#- name: Set IP Address for WireGuard
+#  ansible.builtin.set_fact: 
+#    wireguard_ip_address: "{{ wireguard_ip_address|default({}) | combine( {item: hostvars[item]['ansible_'+wireguard_public_interface]['ipv4']['address'] } ) }}"
+#  loop: "{{ ansible_play_batch }}"
+
+#- name: Dump wireguard_ip_address
+#  debug:
+#    var: wireguard_ip_address
+
+#- name: Set IP Address for WireGuard
+#  ansible.builtin.set_fact:
+#    wireguard_ip_address: "{{ hostvars[{{ item }}]['ansible_'+wireguard_public_interface]['ipv4']['address'] }}"
+#  loop: "{{ ansible_play_batch }}"
+  
+#- name: Set IP Address prefix for WireGuard
+#  ansible.builtin.set_fact:
+#    wireguard_ip_address: "{{ hostvars[{{ item }}]['ansible_'+wireguard_public_interface]['ipv4']['prefix'] }}"
+#  loop: "{{ ansible_play_batch }}"
+
+- name: Install WireGuard
+  ansible.builtin.package:
+    name: wireguard
+    state: latest
+    update_cache: true
+
+- name: Load WireGuard kernel module
+  ansible.builtin.modprobe:
+    name: wireguard
+    state: present
+    persistent: present
+
+- name: "Ensure configuration directory exists : {{ wireguard_config_dir }}"
+  ansible.builtin.file:
+    path: "{{ wireguard_config_dir }}"
+    state: directory
+    mode: '0700'
+    owner: root
+    group: root
+
+- name: Permit traffic in default zone for WireGuard
+  ansible.posix.firewalld:
+    port: "{{ wireguard_port }}/udp"
+    permanent: true
+    state: enabled

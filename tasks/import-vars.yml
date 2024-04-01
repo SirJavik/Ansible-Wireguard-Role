@@ -1,0 +1,19 @@
+---
+#########################################
+#            _             _ _          #
+#           | |           (_) |         #
+#           | | __ ___   ___| | __      #
+#       _   | |/ _` \ \ / / | |/ /      #
+#      | |__| | (_| |\ V /| |   <       #
+#       \____/ \__,_| \_/ |_|_|\_\      #
+#                                       #
+#########################################
+
+
+- name: Load a variable file based on the OS type, or a default if not found
+  ansible.builtin.include_vars: "{{ item }}"
+  with_first_found:
+    - "{{ ansible_distribution }}-{{ ansible_distribution_version }}.yml"
+    - "{{ ansible_distribution }}.yml"
+    - "{{ ansible_os_family }}.yml"
+    - "default.yml"

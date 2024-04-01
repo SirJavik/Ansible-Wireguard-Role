@@ -1,0 +1,99 @@
+---
+#########################################
+#            _             _ _          #
+#           | |           (_) |         #
+#           | | __ ___   ___| | __      #
+#       _   | |/ _` \ \ / / | |/ /      #
+#      | |__| | (_| |\ V /| |   <       #
+#       \____/ \__,_| \_/ |_|_|\_\      #
+#                                       #
+#########################################
+
+### Create WireGuard Private Key
+- name: "Create WireGuard Private Key : {{ wireguard_config_dir }}/private.key"
+  ansible.builtin.shell:
+    cmd: "umask 077 && wg genkey > {{ wireguard_config_dir }}/private.key"
+    creates: "{{ wireguard_config_dir }}/private.key"
+
+### Create WireGuard Public Key
+- name: "Create WireGuard Public Key : {{ wireguard_config_dir }}/public.key"
+  ansible.builtin.shell: 
+    cmd: "wg pubkey < {{ wireguard_config_dir }}/private.key > {{ wireguard_config_dir }}/public.key"
+    creates: "{{ wireguard_config_dir }}/public.key"
+### End of key generation
+
+### Enable IP forwarding
+- name: "Enable IP forwarding"
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: 1
+    state: present
+    reload: true
+    sysctl_set: true
+    sysctl_file: /etc/sysctl.d/99-ipforward.conf
+
+- name: "Enable IP forwarding for IPv6"
+  ansible.posix.sysctl:
+    name: net.ipv6.conf.all.forwarding
+    value: 1
+    state: present
+    reload: true
+    sysctl_set: true
+    sysctl_file: /etc/sysctl.d/99-ipforward.conf
+### End of IP forwarding
+ 
+### Slurp WireGuard keys
+- name: "Slurp WireGuard Private Key"
+  ansible.builtin.slurp:
+    src: "{{ wireguard_config_dir }}/private.key"
+  register: wireguard_private_key_file
+
+- name: "Slurp WireGuard Public Key"
+  ansible.builtin.slurp:
+    src: "{{ wireguard_config_dir }}/public.key"
+  register: wireguard_public_key_file
+
+- name: "Set WireGuard Public Key hostvars"
+  ansible.builtin.set_fact:
+    wireguard_public_key: "{{ wireguard_public_key_file['content'] | b64decode | replace('\n', '') }}"
+### End of slurp
+
+- name: "Configure WireGuard interface"
+  ansible.builtin.template:
+    src: "wg.conf.j2"
+    dest: "{{ wireguard_config_file }}"
+    owner: root
+    group: root
+    mode: '0600'
+  notify: Reload wg-quick@wg0
+
+### File permissions
+- name: "Ensure file permissions for WireGuard configuration file : {{ wireguard_config_file }}"
+  ansible.builtin.file:
+    path: "{{ wireguard_config_file }}"
+    mode: '0600'
+    owner: root
+    group: root
+
+- name: "Ensure file permissions for private key : {{ wireguard_config_dir }}/private.key"
+  ansible.builtin.file:
+    path: "{{ wireguard_config_dir }}/private.key"
+    mode: '0600'
+    owner: root
+    group: root
+
+- name: "Ensure file permissions for public key : {{ wireguard_config_dir }}/public.key"
+  ansible.builtin.file:
+    path: "{{ wireguard_config_dir }}/public.key"
+    mode: '0644'
+    owner: root
+    group: root
+### End of file permissions
+
+### Enable WireGuard service
+- name: "Enable WireGuard service"
+  ansible.builtin.systemd:
+    name: "wg-quick@wg0"
+    enabled: yes
+    state: started
+    daemon_reload: true
